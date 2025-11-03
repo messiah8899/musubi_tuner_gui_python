@@ -1143,7 +1143,7 @@ class NetworkTrainer:
 
     def sample_image_inference(self, accelerator, args, transformer, dit_dtype, vae, save_dir, sample_parameter, epoch, steps):
         """architecture independent sample images"""
-        sample_steps = sample_parameter.get("sample_steps", 20)
+        sample_steps = sample_parameter.get("sample_steps", args.sample_steps if hasattr(args, 'sample_steps') else 20)
         width = sample_parameter.get("width", 256)  # make smaller for faster and memory saving inference
         height = sample_parameter.get("height", 256)
         frame_count = sample_parameter.get("frame_count", 1)
@@ -1194,6 +1194,7 @@ class NetworkTrainer:
         logger.info(f"width: {width}")
         logger.info(f"frame count: {frame_count}")
         logger.info(f"sample steps: {sample_steps}")
+        logger.info(f"sample solver: {getattr(args, 'sample_solver', 'unipc')}")
         logger.info(f"guidance scale: {guidance_scale}")
         logger.info(f"discrete flow shift: {discrete_flow_shift}")
         if seed is not None:
@@ -2473,6 +2474,12 @@ def setup_parser_common() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="file for prompts to generate sample images / 学習中モデルのサンプル出力用プロンプトのファイル",
+    )
+    parser.add_argument(
+        "--sample_steps",
+        type=int,
+        default=20,
+        help="number of steps for sample generation (default: 20, Wan recommended: 40) / サンプル生成時の推論ステップ数（デフォルト: 20、Wan推奨: 40）",
     )
 
     # optimizer and lr scheduler settings

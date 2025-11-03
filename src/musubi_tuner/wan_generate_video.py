@@ -33,6 +33,7 @@ from musubi_tuner.wan.modules.clip import CLIPModel
 from musubi_tuner.modules.scheduling_flow_match_discrete import FlowMatchDiscreteScheduler
 from musubi_tuner.wan.utils.fm_solvers import FlowDPMSolverMultistepScheduler, get_sampling_sigmas, retrieve_timesteps
 from musubi_tuner.wan.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from musubi_tuner.wan.utils.flowmatch_sa_ode_stable import FlowMatchSAODEStableScheduler
 
 lycoris_available = find_spec("lycoris") is not None
 if lycoris_available:
@@ -68,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ckpt_dir", type=str, default=None, help="The path to the checkpoint directory (Wan 2.1 official).")
     parser.add_argument("--task", type=str, default="t2v-14B", choices=list(WAN_CONFIGS.keys()), help="The task to run.")
     parser.add_argument(
-        "--sample_solver", type=str, default="unipc", choices=["unipc", "dpm++", "vanilla"], help="The solver used to sample."
+        "--sample_solver", type=str, default="unipc", choices=["unipc", "dpm++", "vanilla", "sa_ode_stable"], help="The solver used to sample."
     )
 
     parser.add_argument("--dit", type=str, default=None, help="DiT checkpoint path")
@@ -1289,6 +1290,16 @@ def setup_scheduler(args: argparse.Namespace, config, device: torch.device) -> T
             return org_step(model_output, timestep, sample, return_dict=return_dict)
 
         scheduler.step = step_wrapper
+    elif args.sample_solver == "sa_ode_stable":
+        scheduler = FlowMatchSAODEStableScheduler(
+            num_train_timesteps=config.num_train_timesteps,
+            shift=args.flow_shift,
+            solver_order=3,
+            use_adaptive_order=True,
+            use_velocity_smoothing=True
+        )
+        scheduler.set_timesteps(args.infer_steps, device=device)
+        timesteps = scheduler.timesteps
     else:
         raise NotImplementedError("Unsupported solver.")
 

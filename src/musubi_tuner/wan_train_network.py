@@ -33,6 +33,8 @@ from musubi_tuner.wan.modules.model import WanModel, detect_wan_sd_dtype, load_w
 from musubi_tuner.wan.modules.t5 import T5EncoderModel
 from musubi_tuner.wan.modules.vae import WanVAE
 from musubi_tuner.wan.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from musubi_tuner.wan.utils.fm_solvers import FlowDPMSolverMultistepScheduler, get_sampling_sigmas, retrieve_timesteps
+from musubi_tuner.wan.utils.flowmatch_sa_ode_stable import FlowMatchSAODEStableScheduler
 
 
 class WanNetworkTrainer(NetworkTrainer):
@@ -365,10 +367,35 @@ class WanNetworkTrainer(NetworkTrainer):
             vae.to("cpu")
             clean_memory_on_device(device)
 
-        # use the default value for num_train_timesteps (1000)
-        scheduler = FlowUniPCMultistepScheduler(shift=1, use_dynamic_shifting=False)
-        scheduler.set_timesteps(sample_steps, device=device, shift=discrete_flow_shift)
-        timesteps = scheduler.timesteps
+        logger.info(f"sample solver: {getattr(args, 'sample_solver', 'unipc')}")
+        if getattr(args, "sample_solver", "unipc") == "unipc":
+            scheduler = FlowUniPCMultistepScheduler(num_train_timesteps=self.config.num_train_timesteps, shift=1, use_dynamic_shifting=False)
+            scheduler.set_timesteps(sample_steps, device=device, shift=discrete_flow_shift)
+            timesteps = scheduler.timesteps
+        elif args.sample_solver == "dpm++":
+            scheduler = FlowDPMSolverMultistepScheduler(num_train_timesteps=self.config.num_train_timesteps, shift=1, use_dynamic_shifting=False)
+            sampling_sigmas = get_sampling_sigmas(sample_steps, discrete_flow_shift)
+            timesteps, _ = retrieve_timesteps(scheduler, device=device, sigmas=sampling_sigmas)
+        elif args.sample_solver == "vanilla":
+            scheduler = FlowMatchDiscreteScheduler(num_train_timesteps=self.config.num_train_timesteps, shift=discrete_flow_shift)
+            scheduler.set_timesteps(sample_steps, device=device)
+            timesteps = scheduler.timesteps
+            org_step = scheduler.step
+            def step_wrapper(model_output, timestep, sample, return_dict=False, generator=None):
+                return org_step(model_output, timestep, sample, return_dict=return_dict)
+            scheduler.step = step_wrapper
+        elif args.sample_solver == "sa_ode_stable":
+            scheduler = FlowMatchSAODEStableScheduler(
+                num_train_timesteps=self.config.num_train_timesteps,
+                shift=discrete_flow_shift,
+                solver_order=3,
+                use_adaptive_order=True,
+                use_velocity_smoothing=True
+            )
+            scheduler.set_timesteps(sample_steps, device=device)
+            timesteps = scheduler.timesteps
+        else:
+            raise NotImplementedError("Unsupported solver.")
 
         # Generate noise for the required number of frames only
         noise = torch.randn(16, latent_video_length, lat_h, lat_w, dtype=torch.float32, generator=generator, device=device).to(
@@ -709,6 +736,7 @@ def wan_setup_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
     )
     parser.add_argument("--vae_cache_cpu", action="store_true", help="cache features in VAE on CPU")
     parser.add_argument("--one_frame", action="store_true", help="Use one frame sampling method for sample generation")
+    parser.add_argument("--sample_solver", type=str, default="unipc", choices=["unipc", "dpm++", "vanilla", "sa_ode_stable"], help="solver for sample generation")
 
     # Wan2.2 specific arguments
     parser.add_argument(

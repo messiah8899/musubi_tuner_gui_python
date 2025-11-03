@@ -63,24 +63,24 @@ If you find this project helpful, please consider supporting its development via
 
 GitHub Discussions Enabled: We've enabled GitHub Discussions for community Q&A, knowledge sharing, and technical information exchange. Please use Issues for bug reports and feature requests, and Discussions for questions and sharing experiences. [Join the conversation →](https://github.com/kohya-ss/musubi-tuner/discussions)
 
-- October 26, 2025
+- October 26, 2024
     - Fixed a bug in Qwen-Image training where attention calculations were incorrect when the batch size was 2 or more and `--split_attn` was not specified. See [PR #688](https://github.com/kohya-ss/musubi-tuner/pull/688).
     - Added `--disable_numpy_memmap` option to Wan, FramePack, and Qwen-Image training and inference scripts. Thank you FurkanGozukara for [PR #681](https://github.com/kohya-ss/musubi-tuner/pull/681). Also see [PR #687](https://github.com/kohya-ss/musubi-tuner/pull/687).
         - When specified, this option disables numpy memory mapping during model loading. This may speed up model loading in some environments (e.g., RunPod), but increases RAM usage.
 
-- October 25, 2025
+- October 25, 2024
     - Fixed a bug in image datasets with control images where the combination of target and control images was not loaded correctly. See [PR #684](https://github.com/kohya-ss/musubi-tuner/pull/684).
         - **If you are using an image dataset with control images, please recreate the latent cache.**
         - Since only the first match was used for judgment, when the target images were `a.png` and `ab.png`, and the control images were `a_1.png` and `ab_1.png`, both `a_1.png` and `ab_1.png` were combined with `a.png`.
 
-- October 13, 2025
+- October 13, 2024
     - Added Reference Consistency Mask (RCM) feature to Qwen-Image-Edit, 2509 inference script to improve pixel-level consistency of generated images. See [PR #643](https://github.com/kohya-ss/musubi-tuner/pull/643)
         - RCM addresses the issue of slight positional drift in generated images compared to the control image. For details, refer to the [Qwen-Image documentation](./docs/qwen_image.md#inpainting-and-reference-consistency-mask-rcm).
     - Fixed a bug where the control image was being resized to match the output image size even when the `--resize_control_to_image_size` option was not specified. **This may change the generated images, so please check your options.**
     - FramePack 1-frame inference now includes the `--one_frame_auto_resize` option. [PR #646](https://github.com/kohya-ss/musubi-tuner/pull/646)
         - Automatically adjusts the resolution of the generated image. This option is only effective when `--one_frame_inference` is specified. For details, refer to the [FramePack 1-frame inference documentation](./docs/framepack_1f.md#one-single-frame-inference--1フレーム推論).
-        
-- October 5, 2025
+
+- October 5, 2024
     - Changed the epoch switching from `collate_fn` to before the start of the DataLoader fetching loop. See [PR #601](https://github.com/kohya-ss/musubi-tuner/pull/601) for more details.
     - In the previous implementation, the ARB buckets were shuffled after fetching the first data of the epoch. Therefore, the first data of the epoch was fetched in the ARB sorted order of the previous epoch. This caused duplication and omission of data within the epoch.
     - Each DataSet now shuffles the ARB buckets immediately after detecting a change in the shared epoch in `__getitem__`. This ensures that data is fetched in the new order from the beginning, eliminating duplication and omission.
@@ -91,7 +91,7 @@ GitHub Discussions Enabled: We've enabled GitHub Discussions for community Q&A, 
     - Added a method to specify training options in a configuration file in the [Advanced Configuration documentation](./docs/advanced_config.md#using-configuration-files-to-specify-training-options--設定ファイルを使用した学習オプションの指定). See [PR #630](https://github.com/kohya-ss/musubi-tuner/pull/630).
     - Restructured the documentation. Moved dataset configuration-related documentation to `docs/dataset_config.md`.
 
-- October 3, 2025
+- October 3, 2024
     - Improved the block swap mechanism used in each training script to significantly reduce shared GPU memory usage in Windows environments. See [PR #585](https://github.com/kohya-ss/musubi-tuner/pull/585)
         - Changed the block swap offload destination from shared GPU memory to CPU memory. This does not change the total memory usage but significantly reduces shared GPU memory usage.
         - For example, with 32GB of main memory, previously only up to 16GB could be offloaded, but with this change, it can be offloaded up to "32GB - other usage".

@@ -1,0 +1,51 @@
+# Musubi Tuner Requirements
+# Core dependencies for Linux/cross-platform compatibility
+
+# Core ML libraries
+torch>=2.5.1
+torchvision>=0.20.1
+accelerate==1.6.0
+transformers==4.54.1
+diffusers==0.32.1
+safetensors==0.4.5
+
+# GUI and visualization
+gradio>=4.0.0
+matplotlib==3.10.0
+
+# Image and video processing
+opencv-python==4.10.0.84
+pillow>=11.3.0
+av==14.0.1
+imageio
+einops==0.7.0
+
+# Data processing and utilities
+numpy
+tqdm==4.67.1
+toml==0.10.2
+voluptuous==0.15.2
+psutil
+
+# HuggingFace integration
+huggingface-hub==0.34.3
+
+# Wan2.1 specific dependencies
+ftfy==6.3.1
+easydict==1.13
+regex
+
+# FLUX.1 Kontext dependencies
+sentencepiece==0.2.1
+
+# Optional but recommended
+bitsandbytes  # For quantization support
+
+# Development and debugging (optional)
+# tensorboard
+# prompt-toolkit==3.0.51
+
+# Note: For CUDA support, install PyTorch with CUDA:
+# For CUDA 12.4: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# For CUDA 12.8: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# For CPU only: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
