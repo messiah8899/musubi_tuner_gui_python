@@ -20,27 +20,153 @@ import tempfile
 
 def _setup_matplotlib_cjk_font():
     try:
+        # 刷新 Matplotlib 字体缓存
+        try:
+            font_manager._rebuild()
+        except:
+            pass
+        
+        # 获取所有可用字体
         available_fonts = {f.name for f in font_manager.fontManager.ttflist}
+        
+        # 打印调试信息：查找所有可能的CJK字体
+        print("[DEBUG] 正在查找CJK字体...")
+        cjk_keywords = ['CJK', 'Noto', 'Sans', 'WenQuanYi', 'SimHei', 'YaHei', 'PingFang', 'Heiti', 'STHeiti', 'Source Han']
+        found_cjk_fonts = [f for f in available_fonts if any(keyword in f for keyword in cjk_keywords)]
+        if found_cjk_fonts:
+            print(f"[DEBUG] 找到的CJK相关字体: {', '.join(found_cjk_fonts[:5])}{'...' if len(found_cjk_fonts) > 5 else ''}")
+        
         candidates = [
+            # Windows 字体
             'Microsoft YaHei',
             'Microsoft YaHei UI',
             'SimHei',
+            # Linux 字体（更多选项）
             'Noto Sans CJK SC',
-            'Source Han Sans CN'
+            'Noto Sans CJK JP',
+            'Noto Sans CJK TC',
+            'Noto Sans CJK KR',
+            'Noto Sans Mono CJK SC',
+            'Source Han Sans',
+            'Source Han Sans CN',
+            'Source Han Sans SC',
+            'WenQuanYi Micro Hei',
+            'WenQuanYi Zen Hei',
+            'Droid Sans Fallback',
+            'AR PL UMing CN',
+            'AR PL UKai CN',
+            # macOS 字体
+            'PingFang SC',
+            'Heiti SC',
+            'STHeiti',
         ]
+        
         chosen = None
         for name in candidates:
             if name in available_fonts:
                 chosen = name
                 break
+        
+        # 如果精确匹配失败，尝试模糊匹配
+        if not chosen and found_cjk_fonts:
+            for font in found_cjk_fonts:
+                if 'Noto' in font and 'CJK' in font:
+                    chosen = font
+                    print(f"[DEBUG] 使用模糊匹配找到的字体: {chosen}")
+                    break
+        
         if chosen:
             plt.rcParams['font.family'] = 'sans-serif'
             plt.rcParams['font.sans-serif'] = [chosen]
+            print(f"[INFO] ✓ 使用中文字体: {chosen}")
+        else:
+            print("[WARN] 未找到中文字体，Loss 曲线中文可能显示为方框")
+            print("[WARN] 可用字体数量:", len(available_fonts))
+            if found_cjk_fonts:
+                print(f"[WARN] 找到了CJK相关字体但无法使用: {', '.join(found_cjk_fonts[:3])}")
+            print("[WARN] 尝试刷新字体缓存: rm -rf ~/.cache/matplotlib")
+            print("[WARN] 或重新安装字体: sudo apt install --reinstall fonts-noto-cjk")
+        
         plt.rcParams['axes.unicode_minus'] = False
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] 字体设置失败: {e}")
+        import traceback
+        traceback.print_exc()
         pass
 
 _setup_matplotlib_cjk_font()
+
+
+def get_gpu_memory_info():
+    """获取GPU显存信息"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.used,memory.total,memory.free,utilization.gpu', '--format=csv,noheader,nounits'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            gpu_info = []
+            for i, line in enumerate(lines):
+                parts = line.strip().split(',')
+                if len(parts) >= 4:
+                    used = int(parts[0].strip())
+                    total = int(parts[1].strip())
+                    free = int(parts[2].strip())
+                    util = int(parts[3].strip())
+                    gpu_info.append({
+                        'id': i,
+                        'used': used,
+                        'total': total,
+                        'free': free,
+                        'util': util,
+                        'used_percent': round(used / total * 100, 1) if total > 0 else 0
+                    })
+            return gpu_info
+    except Exception as e:
+        print(f"[WARN] Failed to get GPU info: {e}")
+    return []
+
+
+def format_gpu_memory_display():
+    """格式化GPU显存显示"""
+    gpu_info = get_gpu_memory_info()
+    if not gpu_info:
+        return "❌ 无法获取GPU信息\n（nvidia-smi不可用或无GPU）"
+    
+    display = []
+    for gpu in gpu_info:
+        display.append(f"🎮 GPU {gpu['id']}:")
+        display.append(f"  ┌─ 显存状态")
+        display.append(f"  │  已用: {gpu['used']}MB ({gpu['used_percent']}%)")
+        display.append(f"  │  空闲: {gpu['free']}MB")
+        display.append(f"  │  总量: {gpu['total']}MB")
+        display.append(f"  └─ GPU核心利用率: {gpu['util']}%")
+        
+        # 根据显存使用情况显示状态
+        if gpu['used_percent'] > 90:
+            display.append(f"  ⚠️  显存接近满载，建议等待或调整参数")
+        elif gpu['used_percent'] > 75:
+            display.append(f"  ⚡ 显存使用较高，可以训练但要注意监控")
+        elif gpu['used_percent'] < 10:
+            display.append(f"  ✅ 显存充足，可以安全开始训练")
+        else:
+            display.append(f"  💚 显存正常")
+        
+        # GPU核心利用率说明
+        if gpu['util'] > 90:
+            display.append(f"  🔥 GPU核心满负荷运算中")
+        elif gpu['util'] > 50:
+            display.append(f"  🔧 GPU核心运算中")
+        elif gpu['util'] < 5:
+            display.append(f"  😴 GPU核心空闲")
+        
+        display.append("")
+    
+    return "\n".join(display)
 
 
 running_processes = {
@@ -821,13 +947,40 @@ def run_wan_training(
     sample_steps: int,
     sample_solver: str,
     logging_dir: str,
-    wandb_run_name: str
+    wandb_run_name: str,
+    enable_auto_recovery: bool = True,
+    max_oom_retries: int = 10
 ) -> Generator[str, None, None]:
 
     dataset_config = get_dataset_config(dataset_config_file, dataset_config_text)
     if not dataset_config:
         yield "[ERROR] 请提供数据集配置文件\n"
         return
+    
+    # 自动检测模型类型并调整参数
+    model_file_lower = dit_weights_path.lower()
+    if "fp16" in model_file_lower or "wan2.2" in model_file_lower or "wan22" in model_file_lower:
+        # FP16 模型（Wan2.2）
+        detected_precision = "fp16"
+        use_fp8_base = False
+        model_type_info = "FP16 (Wan2.2)"
+    elif "fp8" in model_file_lower:
+        # FP8 模型（Wan2.1）
+        detected_precision = "bf16"
+        use_fp8_base = fp8  # 尊重用户的FP8设置
+        model_type_info = "FP8 (Wan2.1)"
+    else:
+        # 未知模型，使用用户设置
+        detected_precision = mixed_precision
+        use_fp8_base = fp8
+        model_type_info = "Unknown"
+    
+    # 如果用户选择的mixed_precision与检测到的不一致，使用检测到的并给出警告
+    if detected_precision != mixed_precision:
+        yield f"[WARN] 检测到 {model_type_info} 模型，自动调整混合精度: {mixed_precision} -> {detected_precision}\n"
+        mixed_precision = detected_precision
+    
+    yield f"[INFO] 模型类型: {model_type_info}, 混合精度: {mixed_precision}, FP8基础: {'是' if use_fp8_base else '否'}\n"
 
     settings = {
         "wan_training": {
@@ -916,7 +1069,7 @@ def run_wan_training(
     if enable_gradient_checkpointing:
         command.append("--gradient_checkpointing")
 
-    if fp8:
+    if use_fp8_base:
         command.append("--fp8_base")
 
     if is_wan22 and dit_low_noise_path.strip():
@@ -928,13 +1081,15 @@ def run_wan_training(
     command.extend(["--sample_steps", str(sample_steps)])
     command.extend(["--sample_solver", sample_solver])
 
+    temp_prompts_file_path = None
     if sample_every_n_epochs > 0 and sample_prompts.strip():
         temp_prompts_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
         temp_prompts_file.write(sample_prompts.strip())
         temp_prompts_file.close()
+        temp_prompts_file_path = temp_prompts_file.name
 
         command.extend(["--sample_every_n_epochs", str(sample_every_n_epochs)])
-        command.extend(["--sample_prompts", temp_prompts_file.name])
+        command.extend(["--sample_prompts", temp_prompts_file_path])
 
     if logging_dir.strip():
         command.extend(["--logging_dir", logging_dir.strip()])
@@ -956,29 +1111,47 @@ def run_wan_training(
     accumulated += f"[DEBUG] 完整命令: {' '.join(command)}\n\n"
     yield accumulated
 
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=get_env_with_pythonpath())
-    running_processes["train"] = proc
-    last_yield = time.time()
-    for line in iter(proc.stdout.readline, ''):
-        if line:
-            accumulated += line
-            parsed_data = parse_training_log(line)
-            if parsed_data:
-                if len(training_data['learning_rates']) > 0:
-                    training_data['learning_rates'][-1] = float(learning_rate) if learning_rate else 1e-5
-            if time.time() - last_yield >= 1.5:
-                last_yield = time.time()
-                yield accumulated
-    proc.wait()
-    running_processes["train"] = None
-    if proc.returncode != 0:
-        accumulated += f"\n[ERROR] 训练退出代码 {proc.returncode}\n"
-    else:
-        accumulated += "\n[INFO] 训练成功完成！\n"
-    yield accumulated
+    try:
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=get_env_with_pythonpath())
+        running_processes["train"] = proc
+        last_yield = time.time()
+        for line in iter(proc.stdout.readline, ''):
+            if line:
+                accumulated += line
+                parsed_data = parse_training_log(line)
+                if parsed_data:
+                    if len(training_data['learning_rates']) > 0:
+                        training_data['learning_rates'][-1] = float(learning_rate) if learning_rate else 1e-5
+                if time.time() - last_yield >= 1.5:
+                    last_yield = time.time()
+                    yield accumulated
+        proc.wait()
+        running_processes["train"] = None
+        if proc.returncode != 0:
+            accumulated += f"\n[ERROR] 训练退出代码 {proc.returncode}\n"
+        else:
+            accumulated += "\n[INFO] 训练成功完成！\n"
+        yield accumulated
+    finally:
+        # 清理临时文件
+        if temp_prompts_file_path and os.path.exists(temp_prompts_file_path):
+            try:
+                os.unlink(temp_prompts_file_path)
+            except Exception as e:
+                print(f"[WARN] Failed to delete temp file {temp_prompts_file_path}: {e}")
 
 settings = load_settings()
 
+# 辅助函数：将纯值映射到带描述的选项
+def map_value_to_choice(value, choices):
+    """将纯值（如'constant'）映射到完整选项（如'constant - 描述'）"""
+    if not value:
+        return choices[0] if choices else ""
+    
+    for choice in choices:
+        if choice.startswith(value + " - ") or choice == value:
+            return choice
+    return choices[0] if choices else ""
 
 
 custom_css = """
@@ -1076,7 +1249,44 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(), title="Musubi Tuner v0.2.
         - **Wan2.2**: [Comfy-Org/Wan_2.2_ComfyUI_Repackaged](https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged)
         - **Qwen-Image**: [Comfy-Org/Qwen-Image_ComfyUI](https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI)
         - **FramePack**: [lllyasviel/FramePackI2V_HY](https://huggingface.co/lllyasviel/FramePackI2V_HY)
-
+        
+        ---
+        ## 🎮 GPU 显存监控
+        """)
+        
+        gpu_memory_display = gr.Textbox(
+            label="GPU 显存状态",
+            value=format_gpu_memory_display(),
+            lines=10,
+            interactive=False,
+            show_copy_button=True
+        )
+        
+        with gr.Row():
+            gpu_refresh_btn = gr.Button("🔄 刷新显存信息", variant="secondary")
+            gpu_auto_refresh = gr.Checkbox(label="自动刷新 (每5秒)", value=False)
+        
+        # 刷新按钮点击事件
+        gpu_refresh_btn.click(
+            fn=format_gpu_memory_display,
+            outputs=gpu_memory_display
+        )
+        
+        # 自动刷新定时器
+        gpu_timer = gr.Timer(5, active=False)
+        gpu_timer.tick(
+            fn=format_gpu_memory_display,
+            outputs=gpu_memory_display
+        )
+        
+        # 自动刷新开关
+        gpu_auto_refresh.change(
+            fn=lambda x: gr.Timer(active=x),
+            inputs=gpu_auto_refresh,
+            outputs=gpu_timer
+        )
+        
+        gr.Markdown("""
         ### 性能优化提示:
         - **FP8 量化**: 节省显存
         - **CPU 卸载**: 节省 20-30% 显存
@@ -1397,17 +1607,21 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(), title="Musubi Tuner v0.2.
                     )
 
                 with gr.Row():
+                    lr_scheduler_choices = [
+                        "constant - 恒定学习率，适合微调和小数据集",
+                        "constant_with_warmup - 恒定+预热，适合大模型训练",
+                        "cosine - 余弦退火，收敛平滑，适合长时间训练",
+                        "cosine_with_restarts - 余弦+重启，周期性重启，适合跳出局部最优",
+                        "linear - 线性衰减，学习率线性下降到0",
+                        "polynomial - 多项式衰减，介于线性和余弦之间"
+                    ]
                     wan_adv_lr_scheduler = gr.Dropdown(
                         label="学习率调度器",
-                        choices=[
-                            "constant - 恒定学习率，适合微调和小数据集",
-                            "constant_with_warmup - 恒定+预热，适合大模型训练",
-                            "cosine - 余弦退火，收敛平滑，适合长时间训练",
-                            "cosine_with_restarts - 余弦+重启，周期性重启，适合跳出局部最优",
-                            "linear - 线性衰减，学习率线性下降到0",
-                            "polynomial - 多项式衰减，介于线性和余弦之间"
-                        ],
-                        value=settings.get("wan_training", {}).get("lr_scheduler", "constant - 恒定学习率，适合微调和小数据集"),
+                        choices=lr_scheduler_choices,
+                        value=map_value_to_choice(
+                            settings.get("wan_training", {}).get("lr_scheduler", "constant"),
+                            lr_scheduler_choices
+                        ),
                         info="学习率变化策略",
                         interactive=True
                     )
@@ -1422,18 +1636,22 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(), title="Musubi Tuner v0.2.
 
                 gr.Markdown("#### 时间步采样")
                 with gr.Row():
+                    timestep_sampling_choices = [
+                        "sigma - SD3默认，平衡各噪声级别",
+                        "uniform - 均匀随机，所有timestep概率相同",
+                        "sigmoid - sigmoid变换，更关注中间噪声",
+                        "shift - sigmoid+shift，可调整分布",
+                        "flux_shift - FLUX优化，适合高分辨率",
+                        "qwen_shift - Qwen优化策略",
+                        "logsnr - 基于log-SNR，理论更优"
+                    ]
                     wan_adv_timestep_sampling = gr.Dropdown(
                         label="时间步采样方法",
-                        choices=[
-                            "sigma - SD3默认，平衡各噪声级别",
-                            "uniform - 均匀随机，所有timestep概率相同",
-                            "sigmoid - sigmoid变换，更关注中间噪声",
-                            "shift - sigmoid+shift，可调整分布",
-                            "flux_shift - FLUX优化，适合高分辨率",
-                            "qwen_shift - Qwen优化策略",
-                            "logsnr - 基于log-SNR，理论更优"
-                        ],
-                        value=settings.get("wan_training", {}).get("timestep_sampling", "sigma - SD3默认，平衡各噪声级别"),
+                        choices=timestep_sampling_choices,
+                        value=map_value_to_choice(
+                            settings.get("wan_training", {}).get("timestep_sampling", "sigma"),
+                            timestep_sampling_choices
+                        ),
                         info="影响训练时噪声分布",
                         interactive=True
                     )
@@ -1446,16 +1664,20 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Soft(), title="Musubi Tuner v0.2.
                         interactive=True
                     )
 
+                weighting_scheme_choices = [
+                    "none - 无权重，所有timestep权重相同",
+                    "logit_normal - logit正态分布，SD3论文推荐",
+                    "mode - 模式权重",
+                    "cosmap - 余弦映射，平滑过渡",
+                    "sigma_sqrt - sigma平方根，强调低噪声"
+                ]
                 wan_adv_weighting = gr.Dropdown(
                     label="权重方案",
-                    choices=[
-                        "none - 无权重，所有timestep权重相同",
-                        "logit_normal - logit正态分布，SD3论文推荐",
-                        "mode - 模式权重",
-                        "cosmap - 余弦映射，平滑过渡",
-                        "sigma_sqrt - sigma平方根，强调低噪声"
-                    ],
-                    value=settings.get("wan_training", {}).get("weighting_scheme", "none - 无权重，所有timestep权重相同"),
+                    choices=weighting_scheme_choices,
+                    value=map_value_to_choice(
+                        settings.get("wan_training", {}).get("weighting_scheme", "none"),
+                        weighting_scheme_choices
+                    ),
                     info="时间步分布的权重策略",
                     interactive=True
                 )
